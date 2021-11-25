@@ -1,0 +1,216 @@
+---
+title: '[PADP 8400]: Extra Credit'
+author: "Bradley Howard"
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+---
+
+### [PADP 8400]: Extra Credit
+
+For these exercises we will be using the Global Terrorism Database (GTD) which can be found on Kaggle:
+[https://www.kaggle.com/START-UMD/gtd/data](https://www.kaggle.com/START-UMD/gtd/data). The GTD contains a great deal of information about terrorist events and contains roughly 170,000 such events. 
+
+### Due Date and Time
+
+Due on Monday, November 22nd at 11:59PM
+
+### Guidelines
+
+All extra credit assignments must be submitted as two files:
+
+1. A *R Markdown* file with the following format: "lastname_firstname_extra_credit.Rmd".
+
+2. A compiled *R Markdown* file in HTML with the following format: "lastname_firstname_extra_credit.html"
+
+Please only fill in the sections labelled "YOUR CODE HERE"
+  
+### Learning about assassinations and bombings through random forests
+
+For this problem set, we will be taking the training wheels off and you will have to use your discretion to train a model using random forests, a variant of decision trees.
+
+The goal of this portion of the assignment is to build a machine learning classifier that will enable you to predict assasination events as a function of the features in the data. 
+
+Assassinations are labeled as "1" in the variable "attacktype1" within the GTD and bombings are labeled as "3".
+Using whichever features you would like and whichever package you wouldu like, train two random forest classifiers to predict assassinations and bombings using an 80/20 training test split. 
+
+Report the: accuracy, specificity and sensitivity of the classifiers that you trained for each model.
+
+```{r}
+### Code for assasinations classifier
+##### YOUR CODE HERE ###################################
+library(pacman)
+
+pacman::p_load(tm,SnowballC,foreign,RCurl,plyr,slam,foreign,wordcloud,LiblineaR,e1071,caret,ranger,rpart,rpart.plot)
+data <- read.csv("gtd_edited_nona.csv")
+
+#create assassination predicted variable from attack type
+data$assassination <- 0
+#label all assassinations as 1, 0 otherwise for new feature
+data$assassination[data$attacktype1 == 1] <- 1
+
+
+
+#generates the random indices. creates 80/20 train-test data
+index = sample(nrow(data), 0.8* nrow(data))
+
+data_traina = data[index,] # Training data
+data_testa = data[-index,] # Test data
+
+
+
+rf_assassinations <- ranger(factor(assassination) ~.-attacktype1 -bombing -attacktype1_txt -provstate -corp1 -X, data=data_traina,
+                            importance = 'impurity',
+                            write.forest = T,
+                            probability = T
+                           )
+
+
+rf_probs <- predict(rf_assassinations, data_testa)
+
+rf_class<-ifelse(rf_probs$predictions[,2] > 0.3, 1,0)
+
+predicted_class = factor(rf_class)
+true_class = factor(data_testa$assassination)
+  
+cmat = confusionMatrix(predicted_class,true_class, positive = "1")
+cmat
+
+
+
+
+
+
+
+##### YOUR CODE HERE ###################################
+```
+
+
+
+```{r}
+### Code for bombings classifier
+##### YOUR CODE HERE ###################################
+
+#create bombing predicted variable from attack type
+data$bombing <- 0
+#label all bombings as 1, otherwise 0 for new feature
+data$bombing[data$attacktype1 == 3] <-1 
+
+index = sample(nrow(data), 0.8* nrow(data))
+
+data_trainb = data[index,] # Training data
+data_testb = data[-index,] # Test data
+
+rf_bombings <- ranger(factor(bombing) ~.-attacktype1 -assassination -attacktype1_txt -provstate -corp1 -X, data=data_trainb,
+                            importance = 'impurity',
+                            write.forest = T,
+                            probability = T,
+                      num.trees = 600
+                           )
+
+rf_probs <- predict(rf_bombings, data_testb)
+
+rf_class<-ifelse(rf_probs$predictions[,2] > 0.5, 1,0)
+
+predicted_class = factor(rf_class)
+true_class = factor(data_testb$bombing)
+  
+cmat_b = confusionMatrix(predicted_class,true_class, positive = "1")
+cmat_b
+
+
+
+
+
+
+
+##### YOUR CODE HERE ###################################
+```
+
+### 2. Which features predict assasinations and bombings best?
+
+One of the best things about the random forests algorithm is that it allows us to understand which features contributed most to prediction success. 
+
+Create a plot of the top 10 most important features for each classifier using the % increase in MSE estimate to determine feature importance. 
+
+```{r}
+### Plot for assasinations classifier
+##### YOUR CODE HERE ###################################
+
+varimp_a = rf_assassinations$variable.importance #get variable importance
+words_a<-names(varimp_a)
+importance_a<-as.vector(varimp_a)
+
+# Create a data frame with both words and their importance
+importance.data_a = data.frame(words_a,importance_a)
+
+# Now we need to reorder the data frame in descending order
+# and select top 10
+
+importance.data_a = importance.data_a[order(-importance.data_a$importance),]
+importance.data_a = importance.data_a[1:10,]
+
+
+# Plot variable importance 
+a_plot <-ggplot(importance.data_a, 
+       aes(x=reorder(words_a,importance_a), y=importance_a,fill=importance_a))+ 
+  geom_bar(stat="identity", position="dodge")+ coord_flip()+
+  ylab("Variable Importance")+
+  xlab("")+
+  ggtitle("Variable Importance Plot for Predicting an Assassination")+
+  guides(fill=F)+
+  scale_fill_gradient(low="red", high="blue")
+
+a_plot
+
+
+
+
+
+
+##### YOUR CODE HERE ###################################
+```
+
+
+```{r}
+### Plot for bombings classifier
+##### YOUR CODE HERE ###################################
+varimp_b = rf_bombings$variable.importance
+words_b<-names(varimp_b)
+importance_b<-as.vector(varimp_b)
+
+# Create a data frame with both words and their importance
+importance.data_b = data.frame(words_b,importance_b)
+
+# Now we need to reorder the data frame in descending order
+# and select top 10
+
+importance.data_b = importance.data_b[order(-importance.data_b$importance),]
+importance.data_b = importance.data_b[1:10,]
+
+
+# Plot variable importance 
+b_plot <-ggplot(importance.data_b, 
+       aes(x=reorder(words_b,importance_b), y=importance_b,fill=importance_b))+ 
+  geom_bar(stat="identity", position="dodge")+ coord_flip()+
+  ylab("Variable Importance")+
+  xlab("")+
+  ggtitle("Variable Importance Plot for Predicting a Bombing")+
+  guides(fill=F)+
+  scale_fill_gradient(low="red", high="blue")
+
+b_plot
+
+
+
+
+
+
+##### YOUR CODE HERE ###################################
+```
+
+
+
+
+
